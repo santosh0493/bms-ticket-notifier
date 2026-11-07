@@ -13,7 +13,7 @@ import json
 from html import escape
 from datetime import datetime
 from dataclasses import dataclass, field
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 import requests
 
 # ──────────────────────────────────────────────────────────────────────
@@ -104,7 +104,12 @@ class DateInfo:
 def parse_bms_url(url):
     path = urlparse(url).path.strip("/")
     parts = path.split("/")
-    result = {"event_code": None, "date_code": None, "region_slug": None}
+    query = parse_qs(urlparse(url).query)
+    result = {
+        "event_code": None, "date_code": None, "region_slug": None,
+        "language": (query.get("language") or [""])[0].strip().lower(),
+        "all_formats": (query.get("etCodes") or [""])[0].strip() == "*",
+    }
     for p in parts:
         if re.match(r"^ET\d{8,}$", p):
             result["event_code"] = p
@@ -261,6 +266,22 @@ def parse_shows(data):
                         ))
                     shows.append(show)
     return shows
+
+
+def parse_format_codes(data, language):
+    """Event codes of every format (2D, EPIQ, ...) offered for a language."""
+    codes = []
+    bs = data.get("data", {}).get("bottomSheetData", {})
+    for w in bs.get("format-selector", {}).get("widgets", []):
+        if w.get("type") != "chip-list":
+            continue
+        if language and w.get("text", "").strip().lower() != language:
+            continue
+        for chip in w.get("data", []):
+            ec = chip.get("cta", {}).get("additionalData", {}).get("eventCode")
+            if ec and ec not in codes:
+                codes.append(ec)
+    return codes
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -559,6 +580,15 @@ def main():
     all_dates = []
     movie_info = {"name": "Unknown", "language": ""}
 
+    seen_sessions = set()
+
+    def add_shows(data):
+        for s in parse_shows(data):
+            key = (s.venue_code, s.session_id, s.date_code, s.time_code)
+            if key not in seen_sessions:
+                seen_sessions.add(key)
+                all_shows.append(s)
+
     for dc in date_list:
         data = fetch_bms(event_code, dc, region_code,
                          region_slug_r, lat, lon, geohash)
@@ -570,7 +600,21 @@ def main():
             movie_info = parse_movie_info(data)
 
         all_dates.extend(parse_dates(data))
-        all_shows.extend(parse_shows(data))
+        add_shows(data)
+
+        # URL has etCodes=* → also check every other format of the language
+        if parsed["all_formats"]:
+            for ec in parse_format_codes(data, parsed["language"]):
+                if ec == event_code:
+                    continue
+                extra = fetch_bms(ec, dc, region_code,
+                                  region_slug_r, lat, lon, geohash)
+                if extra:
+                    add_shows(extra)
+
+    if parsed["all_formats"]:
+        movie_info["language"] = (parsed["language"].title()
+                                  + " • All formats").strip(" •")
 
     if not all_shows:
         print("  ❌ No showtimes found.")

@@ -30,7 +30,7 @@ Go to **Settings → Secrets and variables → Actions → Variables** and add:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `BMS_URL` | BookMyShow ticket page URL | `https://in.bookmyshow.com/movies/chennai/.../ET00123456` |
+| `BMS_URL` | BookMyShow ticket page URL. If it contains `etCodes=*&language=<lang>`, every format of that language (2D, EPIQ, HDR…) is checked | `https://in.bookmyshow.com/movies/chennai/.../ET00123456` |
 | `BMS_DATES` | Dates to monitor (YYYYMMDD, comma-separated). Leave empty to auto-detect from URL. | `20260318,20260319` |
 | `BMS_THEATRE` | Filter by theatre name (substring match, comma-separated) | `PVR,IMAX` |
 | `BMS_TIME` | Filter by time period (comma-separated) | `evening,night` |
@@ -39,7 +39,9 @@ Go to **Settings → Secrets and variables → Actions → Variables** and add:
 
 ### 4. Trigger the workflow
 
-Go to **Actions → BMS Ticket Checker** and click **Run workflow**, or wait for it to run automatically every 30 minutes.
+Go to **Actions → BMS Ticket Checker** and click **Run workflow**, or wait for it to run automatically every 10 minutes.
+
+> **Note:** GitHub treats `schedule` triggers as best-effort. Runs are often delayed or skipped (sometimes by hours), especially on low-activity repos. For reliable timing, trigger the workflow from an external cron service (e.g. cron-job.org calling the `workflow_dispatch` API) or run it locally on a schedule.
 
 ## Local Usage
 
@@ -54,7 +56,7 @@ export BMS_THEATRE="PVR"
 export BMS_TIME="evening,night"
 export RESEND_API_KEY="re_..."
 export RESEND_TO_EMAIL="you@example.com"
-export RESEND_TO_EMAIL="python@resend.dev"
+export RESEND_FROM_EMAIL="onboarding@resend.dev"
 
 uv run main.py
 ```
